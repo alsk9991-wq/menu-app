@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id               String   @id @default(cuid())
+  name             String?
+  ownerDeviceHash  String
+  inviteTokenHash  String
+  createdAt        DateTime @default(now())
+
+  devices          Device[]
+  dailyMenus       DailyMenu[]
+  templates        Template[]
+
+  @@index([inviteTokenHash])
+}
+
+model Device {
+  id         String   @id @default(cuid())
+  roomId     String
+  deviceHash String
+  displayName String
+  createdAt  DateTime @default(now())
+
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, deviceHash])
+}
+
+model DailyMenu {
+  id        String   @id @default(cuid())
+  roomId    String
+  date      DateTime // date-onlyとして扱う（UTCの0:00固定推奨）
+  createdAt DateTime @default(now())
+
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  items     MenuItem[]
+
+  @@unique([roomId, date])
+  @@index([roomId, date])
+}
+
+model MenuItem {
+  id        String   @id @default(cuid())
+  dailyMenuId String
+  name      String
+  createdByDeviceHash String
+  createdByDisplayName String
+  orderIndex Int
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dailyMenu DailyMenu @relation(fields: [dailyMenuId], references: [id], onDelete: Cascade)
+
+  @@index([dailyMenuId, orderIndex])
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  roomId    String
+  name      String
+  createdByDeviceHash String
+  createdAt DateTime @default(now())
+
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  items     TemplateItem[]
+}
+
+model TemplateItem {
+  id        String   @id @default(cuid())
+  templateId String
+  name      String
+  orderIndex Int
+
+  template  Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, orderIndex])
+}
