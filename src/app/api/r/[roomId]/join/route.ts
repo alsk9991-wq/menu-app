@@ -1,7 +1,6 @@
-import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { deviceHash } from "@/lib/server/crypto";
+import { sha256Hex } from "@/lib/server/crypto";
 
 export async function POST(
   req: Request,
@@ -10,24 +9,39 @@ export async function POST(
   const { roomId } = await ctx.params;
 
   const body = (await req.json().catch(() => null)) as null | {
-    deviceId?: string;
-    displayName?: string;
+    deviceId: string;
+    displayName: string;
+    inviteToken?: string; // 省略OK
   };
 
-  const displayName = body?.displayName?.trim();
   const deviceId = body?.deviceId?.trim();
+  const displayName = body?.displayName?.trim();
 
-  if (!displayName) {
-    return NextResponse.json({ error: "displayName required" }, { status: 400 });
+  if (!deviceId || !displayName) {
+    return NextResponse.json({ error: "missing fields" }, { status: 400 });
   }
 
-  // deviceId が空ならサーバー側で仮ID生成（最低限）
-  const effectiveDeviceId = deviceId && deviceId.length > 0 ? deviceId : `anon-${crypto.randomUUID()}`;
-
-  const room = await prisma.room.findUnique({ where: { id: roomId } });
+  const room = await prisma.room.findUnique({
+    where: { id: roomId },
+    select: { id: true, inviteTokenHash: true },
+  });
   if (!room) return NextResponse.json({ error: "room not found" }, { status: 404 });
 
-  const dHash = deviceHash(effectiveDeviceId);
+  const fixedToken = (process.env.FIXED_INVITE_TOKEN ?? "").trim();
+  if (!fixedToken) {
+    return NextResponse.json({ error: "FIXED_INVITE_TOKEN is not set" }, { status: 500 });
+  }
+
+  // 送られてきたtokenがあればそれを、無ければ固定トークンを採用
+  const token = (body?.inviteToken ?? "").trim() || fixedToken;
+
+  // DBのhashと一致チェック（固定運用でもチェックは残す）
+  const tokenHash = sha256Hex(token);
+  if (tokenHash !== room.inviteTokenHash) {
+    return NextResponse.json({ error: "invalid invite" }, { status: 403 });
+  }
+
+  const dHash = sha256Hex(deviceId);
 
   await prisma.device.upsert({
     where: { roomId_deviceHash: { roomId, deviceHash: dHash } },

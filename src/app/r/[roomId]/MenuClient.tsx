@@ -9,6 +9,8 @@ import {
   setDisplayName,
 } from "@/lib/client/device";
 import { useRouter } from "next/navigation";
+import { ensureDeviceId } from "@/lib/client/device";
+
 
 type Item = {
   id: string;
@@ -151,19 +153,21 @@ export default function MenuClient({ roomId }: { roomId: string }) {
     }
   }
 
-  function saveProfile() {
-    const dn = displayName.trim();
-    if (!dn) return;
 
-    setDisplayName(dn);
+function saveProfile() {
+  const dn = displayName.trim();
+  if (!dn) return;
 
-    const did = deviceId.trim();
-    if (did) setDeviceId(did);
+  setDisplayName(dn);
 
-    alert("保存しました");
-    router.refresh();
-    load().catch(() => {});
-  }
+  const did = deviceId.trim() || ensureDeviceId(); // 空なら自動生成
+  setDid(did);        // state更新
+  setDeviceId(did);   // localStorage更新
+
+  alert("保存しました");
+  router.refresh();
+  load().catch(() => {});
+}
 
   return (
     <div className="min-h-dvh bg-gray-50">

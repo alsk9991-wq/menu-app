@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
-import { requireActor, HttpError } from "@/lib/server/auth";
+import { requireActor } from "@/lib/server/auth";
 import { jstMidnightToUtcDate, todayYmdInJst } from "@/lib/server/date";
 
 function getDateParam(url: string): string {
@@ -14,7 +14,10 @@ export async function GET(
 ) {
   try {
     const { roomId } = await ctx.params;
-    const actor = await requireActor(req, roomId);
+
+    const actorOrRes = await requireActor(req, roomId);
+    if (actorOrRes instanceof Response) return actorOrRes;
+    const actor = actorOrRes;
 
     const dateYmd = getDateParam(req.url);
     const dateUtc = jstMidnightToUtcDate(dateYmd);
@@ -42,9 +45,6 @@ export async function GET(
       isOwner: actor.isOwner,
     });
   } catch (e: any) {
-    if (e instanceof HttpError) {
-      return NextResponse.json(e.payload, { status: e.status });
-    }
     return NextResponse.json(
       { error: "internal", message: String(e?.message ?? e) },
       { status: 500 }
@@ -58,18 +58,17 @@ export async function POST(
 ) {
   try {
     const { roomId } = await ctx.params;
-    const actor = await requireActor(req, roomId);
+
+    const actorOrRes = await requireActor(req, roomId);
+    if (actorOrRes instanceof Response) return actorOrRes;
+    const actor = actorOrRes;
 
     const dateYmd = getDateParam(req.url);
     const body = (await req.json().catch(() => null)) as null | { name: string };
     const name = body?.name?.trim();
 
-    if (!name) {
-      return NextResponse.json({ error: "name required" }, { status: 400 });
-    }
-    if (name.length > 100) {
-      return NextResponse.json({ error: "name too long" }, { status: 400 });
-    }
+    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (name.length > 100) return NextResponse.json({ error: "name too long" }, { status: 400 });
 
     const dateUtc = jstMidnightToUtcDate(dateYmd);
 
@@ -106,9 +105,6 @@ export async function POST(
       },
     });
   } catch (e: any) {
-    if (e instanceof HttpError) {
-      return NextResponse.json(e.payload, { status: e.status });
-    }
     return NextResponse.json(
       { error: "internal", message: String(e?.message ?? e) },
       { status: 500 }
